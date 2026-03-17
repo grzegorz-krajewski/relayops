@@ -1,9 +1,10 @@
+import json
 import time
 from redis import Redis
 from redis.exceptions import ResponseError
 
 from app.db.task_repository import TaskRepository
-from app.processors.task_processor import process_task
+from app.grpc.client import TaskProcessorClient
 
 
 class StreamConsumer:
@@ -14,6 +15,7 @@ class StreamConsumer:
         group_name: str,
         consumer_name: str,
         task_repository: TaskRepository,
+        grpc_client: TaskProcessorClient,
     ):
         host, port = redis_addr.split(":")
         self.redis = Redis(host=host, port=int(port), decode_responses=True)
@@ -21,6 +23,7 @@ class StreamConsumer:
         self.group_name = group_name
         self.consumer_name = consumer_name
         self.task_repository = task_repository
+        self.grpc_client = grpc_client
 
     def ensure_group(self) -> None:
         try:
@@ -72,14 +75,26 @@ class StreamConsumer:
         )
 
         started = time.perf_counter()
+
         try:
-            result = process_task(task_type=task_type, raw_payload=raw_payload)
+            payload = json.loads(raw_payload)
+            raw_text = str(payload.get("text", ""))
+
+            result = self.grpc_client.process_task(
+                task_id=task_id,
+                task_type=task_type,
+                raw_text=raw_text,
+                trace_id=trace_id,
+            )
+
             duration_ms = int((time.perf_counter() - started) * 1000)
+            result["worker_duration_ms"] = duration_ms
+            result["processor"] = "grpc"
 
             self.task_repository.mark_processed(task_id=task_id, result_payload=result)
 
             print(
-                f"processed task_id={task_id} message_id={message_id} "
+                f"processed via grpc task_id={task_id} message_id={message_id} "
                 f"duration_ms={duration_ms} result={result}"
             )
 

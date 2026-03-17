@@ -5,6 +5,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from app.config.settings import Settings
 from app.consumers.stream_consumer import StreamConsumer
 from app.db.task_repository import TaskRepository
+from app.grpc.client import TaskProcessorClient
+from app.grpc.server import serve as serve_grpc
 
 
 class MetricsHandler(BaseHTTPRequestHandler):
@@ -27,8 +29,11 @@ def serve_metrics():
 def main():
     settings = Settings()
 
-    thread = threading.Thread(target=serve_metrics, daemon=True)
-    thread.start()
+    metrics_thread = threading.Thread(target=serve_metrics, daemon=True)
+    metrics_thread.start()
+
+    grpc_thread = threading.Thread(target=serve_grpc, daemon=True)
+    grpc_thread.start()
 
     print(
         f"worker started env={settings.app_env} "
@@ -36,6 +41,7 @@ def main():
     )
 
     repository = TaskRepository(settings.postgres_dsn)
+    grpc_client = TaskProcessorClient(target="localhost:50051")
 
     consumer = StreamConsumer(
         redis_addr=settings.redis_addr,
@@ -43,6 +49,7 @@ def main():
         group_name=settings.worker_group,
         consumer_name=settings.worker_name,
         task_repository=repository,
+        grpc_client=grpc_client,
     )
 
     while True:
