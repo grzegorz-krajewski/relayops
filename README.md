@@ -1,4 +1,4 @@
-# RelayOps
+# Relay Ops
 
 RelayOps to platforma do przetwarzania zdarzeń i niezawodności systemów, zbudowana w oparciu o Go i Pythona.
 
@@ -201,8 +201,3 @@ Wiadomość w DLQ zawiera:
 - wiele instancji gatewaya za Nginx
 - bardziej rozbudowane dashboardy i alerty
 - runbooki i dokumentacja incydentów
-
-## Uwagi projektowe
-
-To jest projekt edukacyjny i rozwijany iteracyjnie.
-Część decyzji została uproszczona celowo, żeby łatwiej było zrozumieć przepływ zdarzeń, kontrakty, retry i reliability patterns, a później rozwijać to dalej.
