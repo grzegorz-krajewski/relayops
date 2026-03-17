@@ -25,6 +25,11 @@ transient_retries_total = Counter(
     "Total number of transient retry attempts.",
 )
 
+dead_letter_total = Counter(
+    "relayops_worker_dead_letter_total",
+    "Total number of tasks sent to dead-letter stream.",
+)
+
 task_processing_duration_seconds = Histogram(
     "relayops_worker_task_processing_duration_seconds",
     "Task processing duration in seconds.",

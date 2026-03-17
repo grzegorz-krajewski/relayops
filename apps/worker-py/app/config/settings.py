@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     redis_addr: str = "redis:6379"
     redis_stream_name: str = "tasks.stream"
+    redis_dlq_stream_name: str = "tasks.dlq"
     worker_name: str = "worker-1"
     worker_group: str = "worker-group"
 

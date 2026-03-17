@@ -10,6 +10,7 @@ from app.grpc.client import (
     TransientTaskError,
 )
 from app.metrics.metrics import (
+    dead_letter_total,
     grpc_calls_total,
     task_processing_duration_seconds,
     tasks_acked_total,
@@ -17,6 +18,7 @@ from app.metrics.metrics import (
     tasks_processed_total,
     transient_retries_total,
 )
+from app.redis.dlq_publisher import DLQPublisher
 
 
 class StreamConsumer:
@@ -28,6 +30,7 @@ class StreamConsumer:
         consumer_name: str,
         task_repository: TaskRepository,
         grpc_client: TaskProcessorClient,
+        dlq_publisher: DLQPublisher,
         max_transient_retries: int,
         retry_backoff_seconds: float,
     ):
@@ -38,6 +41,7 @@ class StreamConsumer:
         self.consumer_name = consumer_name
         self.task_repository = task_repository
         self.grpc_client = grpc_client
+        self.dlq_publisher = dlq_publisher
         self.max_transient_retries = max_transient_retries
         self.retry_backoff_seconds = retry_backoff_seconds
 
@@ -124,34 +128,73 @@ class StreamConsumer:
             print(f"acked message_id={message_id}")
 
         except PermanentTaskError as exc:
-            tasks_failed_total.inc()
-            self.task_repository.mark_failed(task_id=task_id, error_message=str(exc))
-            self.redis.xack(stream_name, self.group_name, message_id)
-            tasks_acked_total.inc()
-            print(
-                f"permanent failure task_id={task_id} message_id={message_id} "
-                f"task_type={task_type} error={exc}"
+            self._handle_failed_message(
+                stream_name=stream_name,
+                message_id=message_id,
+                task_id=task_id,
+                task_type=task_type,
+                trace_id=trace_id,
+                raw_payload=raw_payload,
+                error_message=str(exc),
+                failure_kind="permanent",
             )
 
         except TransientTaskError as exc:
-            tasks_failed_total.inc()
-            self.task_repository.mark_failed(task_id=task_id, error_message=str(exc))
-            self.redis.xack(stream_name, self.group_name, message_id)
-            tasks_acked_total.inc()
-            print(
-                f"transient failure after retries task_id={task_id} "
-                f"message_id={message_id} task_type={task_type} error={exc}"
+            self._handle_failed_message(
+                stream_name=stream_name,
+                message_id=message_id,
+                task_id=task_id,
+                task_type=task_type,
+                trace_id=trace_id,
+                raw_payload=raw_payload,
+                error_message=str(exc),
+                failure_kind="transient_after_retries",
             )
 
         except Exception as exc:
-            tasks_failed_total.inc()
-            self.task_repository.mark_failed(task_id=task_id, error_message=str(exc))
-            self.redis.xack(stream_name, self.group_name, message_id)
-            tasks_acked_total.inc()
-            print(
-                f"unexpected failure task_id={task_id} message_id={message_id} "
-                f"task_type={task_type} error={exc}"
+            self._handle_failed_message(
+                stream_name=stream_name,
+                message_id=message_id,
+                task_id=task_id,
+                task_type=task_type,
+                trace_id=trace_id,
+                raw_payload=raw_payload,
+                error_message=str(exc),
+                failure_kind="unexpected",
             )
+
+    def _handle_failed_message(
+        self,
+        stream_name: str,
+        message_id: str,
+        task_id: str,
+        task_type: str,
+        trace_id: str,
+        raw_payload: str,
+        error_message: str,
+        failure_kind: str,
+    ) -> None:
+        tasks_failed_total.inc()
+        self.task_repository.mark_failed(task_id=task_id, error_message=error_message)
+
+        dlq_message_id = self.dlq_publisher.publish(
+            task_id=task_id,
+            task_type=task_type,
+            trace_id=trace_id,
+            raw_payload=raw_payload,
+            failure_kind=failure_kind,
+            error_message=error_message,
+        )
+        dead_letter_total.inc()
+
+        self.redis.xack(stream_name, self.group_name, message_id)
+        tasks_acked_total.inc()
+
+        print(
+            f"dead-lettered task_id={task_id} message_id={message_id} "
+            f"dlq_message_id={dlq_message_id} failure_kind={failure_kind} "
+            f"task_type={task_type} error={error_message}"
+        )
 
     def _process_with_retry(self, task_id: str, task_type: str, raw_text: str, trace_id: str) -> dict:
         attempt = 0

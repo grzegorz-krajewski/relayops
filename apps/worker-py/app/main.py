@@ -9,6 +9,7 @@ from app.consumers.stream_consumer import StreamConsumer
 from app.db.task_repository import TaskRepository
 from app.grpc.client import TaskProcessorClient
 from app.grpc.server import serve as serve_grpc
+from app.redis.dlq_publisher import DLQPublisher
 
 
 class MetricsHandler(BaseHTTPRequestHandler):
@@ -46,6 +47,10 @@ def main():
 
     repository = TaskRepository(settings.postgres_dsn)
     grpc_client = TaskProcessorClient(target=settings.grpc_target)
+    dlq_publisher = DLQPublisher(
+        redis_addr=settings.redis_addr,
+        dlq_stream_name=settings.redis_dlq_stream_name,
+    )
 
     consumer = StreamConsumer(
         redis_addr=settings.redis_addr,
@@ -54,6 +59,7 @@ def main():
         consumer_name=settings.worker_name,
         task_repository=repository,
         grpc_client=grpc_client,
+        dlq_publisher=dlq_publisher,
         max_transient_retries=settings.max_transient_retries,
         retry_backoff_seconds=settings.retry_backoff_seconds,
     )
