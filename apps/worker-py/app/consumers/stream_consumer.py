@@ -5,6 +5,13 @@ from redis.exceptions import ResponseError
 
 from app.db.task_repository import TaskRepository
 from app.grpc.client import TaskProcessorClient
+from app.metrics.metrics import (
+    grpc_calls_total,
+    task_processing_duration_seconds,
+    tasks_acked_total,
+    tasks_failed_total,
+    tasks_processed_total,
+)
 
 
 class StreamConsumer:
@@ -80,6 +87,8 @@ class StreamConsumer:
             payload = json.loads(raw_payload)
             raw_text = str(payload.get("text", ""))
 
+            grpc_calls_total.inc()
+
             result = self.grpc_client.process_task(
                 task_id=task_id,
                 task_type=task_type,
@@ -87,11 +96,16 @@ class StreamConsumer:
                 trace_id=trace_id,
             )
 
-            duration_ms = int((time.perf_counter() - started) * 1000)
+            duration_seconds = time.perf_counter() - started
+            duration_ms = int(duration_seconds * 1000)
+
             result["worker_duration_ms"] = duration_ms
             result["processor"] = "grpc"
 
             self.task_repository.mark_processed(task_id=task_id, result_payload=result)
+
+            tasks_processed_total.inc()
+            task_processing_duration_seconds.observe(duration_seconds)
 
             print(
                 f"processed via grpc task_id={task_id} message_id={message_id} "
@@ -99,9 +113,11 @@ class StreamConsumer:
             )
 
             self.redis.xack(stream_name, self.group_name, message_id)
+            tasks_acked_total.inc()
             print(f"acked message_id={message_id}")
 
         except Exception as exc:
+            tasks_failed_total.inc()
             self.task_repository.mark_failed(task_id=task_id, error_message=str(exc))
             print(
                 f"processing failed task_id={task_id} message_id={message_id} "

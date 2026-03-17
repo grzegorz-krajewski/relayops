@@ -2,6 +2,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
 from app.config.settings import Settings
 from app.consumers.stream_consumer import StreamConsumer
 from app.db.task_repository import TaskRepository
@@ -12,10 +14,12 @@ from app.grpc.server import serve as serve_grpc
 class MetricsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/metrics":
+            data = generate_latest()
             self.send_response(200)
-            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+            self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(b"# worker metrics placeholder\n")
+            self.wfile.write(data)
         else:
             self.send_response(404)
             self.end_headers()
