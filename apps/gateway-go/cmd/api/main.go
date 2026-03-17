@@ -6,14 +6,19 @@ import (
 	stdhttp "net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"relayops/apps/gateway-go/internal/config"
 	apphttp "relayops/apps/gateway-go/internal/http"
+	"relayops/apps/gateway-go/internal/metrics"
 	"relayops/apps/gateway-go/internal/redisstream"
 	"relayops/apps/gateway-go/internal/store"
 )
 
 func main() {
 	cfg := config.Load()
+
+	metrics.MustRegister()
 
 	publisher := redisstream.NewPublisher(cfg.RedisAddr, cfg.RedisStreamName)
 	if err := waitForRedis(publisher, 10, 2*time.Second); err != nil {
@@ -30,10 +35,7 @@ func main() {
 
 	go func() {
 		metricsMux := stdhttp.NewServeMux()
-		metricsMux.HandleFunc("/metrics", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
-			w.WriteHeader(stdhttp.StatusOK)
-			_, _ = w.Write([]byte("# metrics placeholder\n"))
-		})
+		metricsMux.Handle("/metrics", promhttp.Handler())
 
 		fmt.Printf("metrics listening on :%s\n", cfg.MetricsPort)
 		if err := stdhttp.ListenAndServe(":"+cfg.MetricsPort, metricsMux); err != nil {
@@ -75,8 +77,10 @@ func main() {
 		_, _ = w.Write([]byte("RelayOps gateway is running"))
 	})
 
+	handlerWithMetrics := apphttp.MetricsMiddleware(mux)
+
 	fmt.Printf("gateway listening on :%s\n", cfg.HTTPPort)
-	if err := stdhttp.ListenAndServe(":"+cfg.HTTPPort, mux); err != nil {
+	if err := stdhttp.ListenAndServe(":"+cfg.HTTPPort, handlerWithMetrics); err != nil {
 		panic(err)
 	}
 }

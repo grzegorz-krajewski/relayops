@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"relayops/apps/gateway-go/internal/metrics"
 	"relayops/apps/gateway-go/internal/redisstream"
 	"relayops/apps/gateway-go/internal/store"
 )
@@ -104,6 +105,7 @@ func (h *Handler) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		traceID,
 	)
 	if err != nil {
+		metrics.TaskPublishErrorsTotal.Inc()
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to publish task"})
 		return
 	}
@@ -117,6 +119,7 @@ func (h *Handler) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		traceID,
 		messageID,
 	); err != nil {
+		metrics.TaskPersistErrorsTotal.Inc()
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to persist task"})
 		return
 	}
@@ -128,6 +131,8 @@ func (h *Handler) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		TraceID:   traceID,
 		MessageID: messageID,
 	})
+
+	metrics.TasksCreatedTotal.Inc()
 }
 
 func (h *Handler) handleGetTask(w http.ResponseWriter, r *http.Request) {
