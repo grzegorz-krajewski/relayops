@@ -1,57 +1,69 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net/http"
-	"os"
+	stdhttp "net/http"
+	"time"
 
-	"github.com/go-chi/chi/v5"
+	"relayops/apps/gateway-go/internal/config"
+	apphttp "relayops/apps/gateway-go/internal/http"
+	"relayops/apps/gateway-go/internal/redisstream"
 )
 
 func main() {
-	httpPort := getenv("GATEWAY_HTTP_PORT", "8080")
-	metricsPort := getenv("GATEWAY_METRICS_PORT", "9090")
+	cfg := config.Load()
+
+	publisher := redisstream.NewPublisher(cfg.RedisAddr, cfg.RedisStreamName)
+
+	if err := publisher.Ping(context.Background()); err != nil {
+		panic(fmt.Sprintf("redis ping failed: %v", err))
+	}
 
 	go func() {
-		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
+		metricsMux := stdhttp.NewServeMux()
+		metricsMux.HandleFunc("/metrics", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+			w.WriteHeader(stdhttp.StatusOK)
 			_, _ = w.Write([]byte("# metrics placeholder\n"))
 		})
 
-		fmt.Printf("metrics listening on :%s\n", metricsPort)
-		if err := http.ListenAndServe(":"+metricsPort, metricsMux); err != nil {
+		fmt.Printf("metrics listening on :%s\n", cfg.MetricsPort)
+		if err := stdhttp.ListenAndServe(":"+cfg.MetricsPort, metricsMux); err != nil {
 			panic(err)
 		}
 	}()
 
-	r := chi.NewRouter()
+	mux := stdhttp.NewServeMux()
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	handler := apphttp.NewHandler(publisher, cfg.RedisStreamName)
+	handler.RegisterRoutes(mux)
+
+	mux.HandleFunc("/health", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		w.WriteHeader(stdhttp.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	mux.HandleFunc("/ready", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
+		defer cancel()
+
+		if err := publisher.Ping(ctx); err != nil {
+			w.WriteHeader(stdhttp.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"not_ready"}`))
+			return
+		}
+
+		w.WriteHeader(stdhttp.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	mux.HandleFunc("/", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+		w.WriteHeader(stdhttp.StatusOK)
 		_, _ = w.Write([]byte("RelayOps gateway is running"))
 	})
 
-	fmt.Printf("gateway listening on :%s\n", httpPort)
-	if err := http.ListenAndServe(":"+httpPort, r); err != nil {
+	fmt.Printf("gateway listening on :%s\n", cfg.HTTPPort)
+	if err := stdhttp.ListenAndServe(":"+cfg.HTTPPort, mux); err != nil {
 		panic(err)
 	}
-}
-
-func getenv(key, fallback string) string {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	return v
 }

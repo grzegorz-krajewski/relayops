@@ -9,8 +9,8 @@ services:
       - redis
       - postgres
     ports:
-      - "${GATEWAY_HTTP_PORT}:8080"
-      - "${GATEWAY_METRICS_PORT}:9090"
+      - "${GATEWAY_HOST_PORT}:8080"
+      - "${GATEWAY_METRICS_HOST_PORT}:9090"
 
   worker-py:
     build:
@@ -25,8 +25,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: relayops-redis
-    ports:
-      - "6379:6379"
 
   postgres:
     image: postgres:16-alpine
@@ -35,8 +33,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
 
   nginx:
     image: nginx:stable-alpine

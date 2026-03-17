@@ -1,7 +1,10 @@
 import os
-import time
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+from app.config.settings import Settings
+from app.consumers.stream_consumer import StreamConsumer
 
 
 class MetricsHandler(BaseHTTPRequestHandler):
@@ -22,17 +25,29 @@ def serve_metrics():
 
 
 def main():
-    worker_name = os.getenv("WORKER_NAME", "worker-1")
-    env = os.getenv("APP_ENV", "local")
+    settings = Settings()
 
     thread = threading.Thread(target=serve_metrics, daemon=True)
     thread.start()
 
-    print(f"worker started: {worker_name} env={env}")
+    print(
+        f"worker started env={settings.app_env} "
+        f"name={settings.worker_name} stream={settings.redis_stream_name}"
+    )
+
+    consumer = StreamConsumer(
+        redis_addr=settings.redis_addr,
+        stream_name=settings.redis_stream_name,
+        group_name=settings.worker_group,
+        consumer_name=settings.worker_name,
+    )
 
     while True:
-        print("worker heartbeat")
-        time.sleep(10)
+        try:
+            consumer.run()
+        except Exception as exc:
+            print(f"worker loop error={exc}")
+            time.sleep(3)
 
 
 if __name__ == "__main__":
