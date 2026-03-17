@@ -1,10 +1,10 @@
-import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from app.config.settings import Settings
 from app.consumers.stream_consumer import StreamConsumer
+from app.db.task_repository import TaskRepository
 
 
 class MetricsHandler(BaseHTTPRequestHandler):
@@ -35,11 +35,14 @@ def main():
         f"name={settings.worker_name} stream={settings.redis_stream_name}"
     )
 
+    repository = TaskRepository(settings.postgres_dsn)
+
     consumer = StreamConsumer(
         redis_addr=settings.redis_addr,
         stream_name=settings.redis_stream_name,
         group_name=settings.worker_group,
         consumer_name=settings.worker_name,
+        task_repository=repository,
     )
 
     while True:

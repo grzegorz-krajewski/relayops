@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     worker_name: str = "worker-1"
     worker_group: str = "worker-group"
 
+    postgres_dsn: str = "postgresql://relayops:relayops@postgres:5432/relayops"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

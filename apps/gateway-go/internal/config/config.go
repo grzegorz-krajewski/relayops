@@ -8,6 +8,7 @@ type Config struct {
 	MetricsPort     string
 	RedisAddr       string
 	RedisStreamName string
+	PostgresDSN     string
 }
 
 func Load() Config {
@@ -17,6 +18,7 @@ func Load() Config {
 		MetricsPort:     getenv("GATEWAY_METRICS_PORT", "9090"),
 		RedisAddr:       getenv("REDIS_ADDR", "redis:6379"),
 		RedisStreamName: getenv("REDIS_STREAM_NAME", "tasks.stream"),
+		PostgresDSN:     getenv("POSTGRES_DSN", "postgresql://relayops:relayops@postgres:5432/relayops"),
 	}
 }
 

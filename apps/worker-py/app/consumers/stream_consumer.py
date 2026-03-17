@@ -2,16 +2,25 @@ import time
 from redis import Redis
 from redis.exceptions import ResponseError
 
+from app.db.task_repository import TaskRepository
 from app.processors.task_processor import process_task
 
 
 class StreamConsumer:
-    def __init__(self, redis_addr: str, stream_name: str, group_name: str, consumer_name: str):
+    def __init__(
+        self,
+        redis_addr: str,
+        stream_name: str,
+        group_name: str,
+        consumer_name: str,
+        task_repository: TaskRepository,
+    ):
         host, port = redis_addr.split(":")
         self.redis = Redis(host=host, port=int(port), decode_responses=True)
         self.stream_name = stream_name
         self.group_name = group_name
         self.consumer_name = consumer_name
+        self.task_repository = task_repository
 
     def ensure_group(self) -> None:
         try:
@@ -67,6 +76,8 @@ class StreamConsumer:
             result = process_task(task_type=task_type, raw_payload=raw_payload)
             duration_ms = int((time.perf_counter() - started) * 1000)
 
+            self.task_repository.mark_processed(task_id=task_id, result_payload=result)
+
             print(
                 f"processed task_id={task_id} message_id={message_id} "
                 f"duration_ms={duration_ms} result={result}"
@@ -76,6 +87,7 @@ class StreamConsumer:
             print(f"acked message_id={message_id}")
 
         except Exception as exc:
+            self.task_repository.mark_failed(task_id=task_id, error_message=str(exc))
             print(
                 f"processing failed task_id={task_id} message_id={message_id} "
                 f"error={exc}"
