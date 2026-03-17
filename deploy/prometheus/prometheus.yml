@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: gateway-go
+    static_configs:
+      - targets: ["gateway-go:9090"]
+
+  - job_name: worker-py
+    static_configs:
+      - targets: ["worker-py:9100"]

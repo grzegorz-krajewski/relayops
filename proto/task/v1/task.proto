@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package task.v1;
+
+option go_package = "relayops/proto/task/v1;taskv1";
+
+message TaskPayload {
+  string raw_text = 1;
+}
+
+message ProcessTaskRequest {
+  string task_id = 1;
+  string task_type = 2;
+  TaskPayload payload = 3;
+  string trace_id = 4;
+}
+
+message ProcessTaskResponse {
+  string task_id = 1;
+  string status = 2;
+  string normalized_text = 3;
+  int64 duration_ms = 4;
+  string error_message = 5;
+}
+
+service TaskProcessor {
+  rpc ProcessTask(ProcessTaskRequest) returns (ProcessTaskResponse);
+}
