@@ -20,6 +20,11 @@ grpc_calls_total = Counter(
     "Total number of gRPC task processor calls.",
 )
 
+transient_retries_total = Counter(
+    "relayops_worker_transient_retries_total",
+    "Total number of transient retry attempts.",
+)
+
 task_processing_duration_seconds = Histogram(
     "relayops_worker_task_processing_duration_seconds",
     "Task processing duration in seconds.",

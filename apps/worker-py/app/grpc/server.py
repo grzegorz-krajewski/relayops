@@ -9,6 +9,16 @@ class TaskProcessorService(task_pb2_grpc.TaskProcessorServicer):
         raw_text = request.raw_text or ""
         normalized = " ".join(raw_text.split())
 
+        if request.task_type == "force_permanent_error":
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details("permanent processing error: invalid input for task type")
+            return task_pb2.ProcessTaskResponse()
+
+        if request.task_type == "force_transient_error":
+            context.set_code(grpc.StatusCode.UNAVAILABLE)
+            context.set_details("transient processing error: processor temporarily unavailable")
+            return task_pb2.ProcessTaskResponse()
+
         if request.task_type == "normalize_payload":
             return task_pb2.ProcessTaskResponse(
                 task_id=request.task_id,

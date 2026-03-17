@@ -45,7 +45,7 @@ def main():
     )
 
     repository = TaskRepository(settings.postgres_dsn)
-    grpc_client = TaskProcessorClient(target="localhost:50051")
+    grpc_client = TaskProcessorClient(target=settings.grpc_target)
 
     consumer = StreamConsumer(
         redis_addr=settings.redis_addr,
@@ -54,6 +54,8 @@ def main():
         consumer_name=settings.worker_name,
         task_repository=repository,
         grpc_client=grpc_client,
+        max_transient_retries=settings.max_transient_retries,
+        retry_backoff_seconds=settings.retry_backoff_seconds,
     )
 
     while True:
